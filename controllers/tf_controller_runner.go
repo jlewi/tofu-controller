@@ -108,6 +108,8 @@ func (r *TerraformReconciler) LookupOrCreateRunner(ctx context.Context, terrafor
 	traceLog.Info("Pod hostname set", "hostname", hostname)
 
 	traceLog.Info("Create a new context for the runner connection")
+
+	hostname = "127.0.0.1"
 	dialCtx, dialCancel := context.WithTimeout(ctx, 30*time.Second)
 	traceLog.Info("Defer dialCancel")
 	defer dialCancel()
@@ -375,7 +377,7 @@ func (r *TerraformReconciler) reconcileRunnerPod(ctx context.Context, terraform 
 	err = r.Get(ctx, runnerPodKey, &runnerPod)
 	traceLog.Info("Check for an error")
 
-	gracefulTermPeriod := *terraform.Spec.RunnerTerminationGracePeriodSeconds
+	//gracefulTermPeriod := *terraform.Spec.RunnerTerminationGracePeriodSeconds
 	if err != nil && errors.IsNotFound(err) {
 		podState = stateNotFound
 	} else if err != nil {
@@ -386,11 +388,11 @@ func (r *TerraformReconciler) reconcileRunnerPod(ctx context.Context, terraform 
 		if !found {
 			// this is the pod created by something else but with the same name
 			podState = stateMustBeDeleted
-			gracefulTermPeriod = int64(1) // force kill = 1 second
+			//gracefulTermPeriod = int64(1) // force kill = 1 second
 		} else if label != tlsSecretName {
 			// this is the old pod, created by the previous instance of the controller
 			podState = stateMustBeDeleted
-			gracefulTermPeriod = *terraform.Spec.RunnerTerminationGracePeriodSeconds // honor the value from the spec
+			//gracefulTermPeriod = *terraform.Spec.RunnerTerminationGracePeriodSeconds // honor the value from the spec
 		} else if runnerPod.DeletionTimestamp != nil {
 			podState = stateTerminating
 		} else if runnerPod.Status.Phase == v1.PodRunning {
@@ -414,26 +416,27 @@ func (r *TerraformReconciler) reconcileRunnerPod(ctx context.Context, terraform 
 		}
 	case stateMustBeDeleted:
 		// delete old pod
+		traceLog.Info("Not deleting Pod must be deleted, attempt deletion")
 		traceLog.Info("Pod must be deleted, attempt deletion")
-		if err := r.Delete(ctx, &runnerPod,
-			client.GracePeriodSeconds(gracefulTermPeriod),
-			client.PropagationPolicy(metav1.DeletePropagationForeground),
-		); err != nil {
-			traceLog.Error(err, "Hit an error")
-			return "", err
-		}
-		// wait for pod to be terminated
-		traceLog.Info("Wait for pod to be terminated and check for an error")
-		if err := waitForPodToBeTerminated(); err != nil {
-			traceLog.Error(err, "Hit an error")
-			return "", fmt.Errorf("failed to wait for the old pod termination: %v", err)
-		}
-		// create new pod
-		traceLog.Info("Create a new pod and check for an error")
-		if err := createNewPod(); err != nil {
-			traceLog.Error(err, "Hit an error")
-			return "", err
-		}
+		//if err := r.Delete(ctx, &runnerPod,
+		//	client.GracePeriodSeconds(gracefulTermPeriod),
+		//	client.PropagationPolicy(metav1.DeletePropagationForeground),
+		//); err != nil {
+		//	traceLog.Error(err, "Hit an error")
+		//	return "", err
+		//}
+		//// wait for pod to be terminated
+		//traceLog.Info("Wait for pod to be terminated and check for an error")
+		//if err := waitForPodToBeTerminated(); err != nil {
+		//	traceLog.Error(err, "Hit an error")
+		//	return "", fmt.Errorf("failed to wait for the old pod termination: %v", err)
+		//}
+		//// create new pod
+		//traceLog.Info("Create a new pod and check for an error")
+		//if err := createNewPod(); err != nil {
+		//	traceLog.Error(err, "Hit an error")
+		//	return "", err
+		//}
 	case stateTerminating:
 		// wait for pod to be terminated
 		traceLog.Info("Check for an error")
