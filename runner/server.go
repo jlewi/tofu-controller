@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/fluxcd/pkg/tar"
@@ -103,10 +105,31 @@ func (r *TerraformRunnerServer) UploadAndExtract(ctx context.Context, req *Uploa
 func (r *TerraformRunnerServer) CleanupDir(ctx context.Context, req *CleanupDirRequest) (*CleanupDirReply, error) {
 	log := ctrl.LoggerFrom(ctx, "instance-id", r.InstanceID).WithName(loggerName)
 	log.Info("cleanup TmpDir", "tmpDir", req.TmpDir)
-	err := os.RemoveAll(req.TmpDir)
+
+	preserveDirEnv := os.Getenv("PRESERVE_TMP_DIR")
+	preserveDir, err := strconv.ParseBool(preserveDirEnv)
 	if err != nil {
-		log.Error(err, "error cleaning up TmpDir", "tmpDir", req.TmpDir)
-		return nil, err
+		log.Error(err, "unable to parse bool", "preserveDirEnv", preserveDirEnv)
+		preserveDir = false
+	}
+
+	if !preserveDir {
+		err := os.RemoveAll(req.TmpDir)
+		if err != nil {
+			log.Error(err, "error cleaning up TmpDir", "tmpDir", req.TmpDir)
+			return nil, err
+		}
+	} else {
+		// Preserve the directory for debugging purposes.
+		// We copy it to a timestamped directory to avoid conflicts.
+		timestamp := time.Now().Format("20060102-150405")
+		dstDir := fmt.Sprintf("%s-%s", req.TmpDir, timestamp)
+		log.Info("preserving TmpDir", "tmpDir", req.TmpDir, "dstDir", dstDir)
+		err := os.Rename(req.TmpDir, dstDir)
+		if err != nil {
+			log.Error(err, "error preserving TmpDir", "tmpDir", req.TmpDir, "dstDir", dstDir)
+			return nil, err
+		}
 	}
 
 	return &CleanupDirReply{Message: "ok"}, nil
@@ -181,6 +204,7 @@ func (r *TerraformRunnerServer) initLogger(log logr.Logger) {
 			r.tf.SetLogger(&LocalPrintfer{logger: log})
 		}
 	}
+	r.tf.SetLogger(&LocalPrintfer{logger: log})
 }
 
 func (r *TerraformRunnerServer) NewTerraform(ctx context.Context, req *NewTerraformRequest) (*NewTerraformReply, error) {
